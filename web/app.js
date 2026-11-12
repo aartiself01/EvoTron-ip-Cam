@@ -106,6 +106,9 @@
       if (c && c.status === 'online') play(t.querySelector('video'), c, q);
     });
     drawList();
+    var cur = sel >= 0 ? slots[sel] : null;
+    $('#ctl').style.display = cur ? 'flex' : 'none';
+    $('#ptzbox').style.display = (cur && cur.ptz) ? 'flex' : 'none';
   }
   function drawList() {
     $('#clist').innerHTML = '<button class="ci' + (sel < 0 ? ' on' : '') + '" data-i="-1"><span class="cn">All cameras<small>' + cams.length + ' of 32 channels</small></span></button>' +
@@ -157,6 +160,9 @@
     $('#f-path').value = d.path || ''; $('#f-spath').value = d.subPath || ''; $('#f-url').value = d.url || ''; $('#f-surl').value = d.subUrl || '';
     $('#f-rec').checked = !!d.record; $('#f-tc').checked = !!d.transcode;
     $('#dtitle').textContent = c ? 'Edit camera' : 'Add camera';
+    onv = c && c.onvif ? c.onvif : null;
+    var op = 80; try { if (onv && onv.xaddr) op = parseInt(new URL(onv.xaddr).port, 10) || 80; } catch (e) { /* ignore */ }
+    $('#f-oport').value = op; $('#omsg').textContent = ''; $('#found').innerHTML = '';
     $('#dlg').showModal();
   }
   $('#add').onclick = function () { openForm(null); };
@@ -165,12 +171,100 @@
     var b = {
       ch: +$('#f-ch').value, name: $('#f-name').value.trim(), ip: $('#f-ip').value.trim(), port: +$('#f-port').value || 554,
       user: $('#f-user').value, pass: $('#f-pass').value, path: $('#f-path').value.trim(), subPath: $('#f-spath').value.trim(),
-      url: $('#f-url').value.trim(), subUrl: $('#f-surl').value.trim(), record: $('#f-rec').checked, transcode: $('#f-tc').checked
+      url: $('#f-url').value.trim(), subUrl: $('#f-surl').value.trim(), record: $('#f-rec').checked, transcode: $('#f-tc').checked, onvif: onv
     };
     api(editing ? '/api/cameras/' + editing : '/api/cameras', editing ? 'PUT' : 'POST', b).then(function (r) {
       if (r.error) { $('#err').textContent = r.error; return; }
       $('#dlg').close(); refresh(true);
     }).catch(function () { /* ignore */ });
+  };
+
+  // ---------- ONVIF: search, auto detect ----------
+  var onv = null, found = [];
+  function omsg(t) { $('#omsg').textContent = t; }
+  $('#f-search').onclick = function () {
+    $('#found').innerHTML = '<div class="note">Searching the network (about 4 seconds)...</div>';
+    api('/api/onvif/discover', 'POST', {}).then(function (list) {
+      found = list;
+      $('#found').innerHTML = list.length ? list.map(function (d, i) {
+        return '<button class="ci" type="button" data-i="' + i + '"><span class="cn">' + esc(d.ip) + ' ' + esc(d.name) + '<small>ONVIF port ' + d.port + (d.hardware ? ' - ' + esc(d.hardware) : '') + '</small></span></button>';
+      }).join('') : '<div class="note">No ONVIF cameras found. Enter the IP address yourself.</div>';
+    }).catch(function () { /* ignore */ });
+  };
+  $('#found').onclick = function (e) {
+    var b = e.target.closest('.ci'); if (!b) return;
+    var d = found[+b.dataset.i]; if (!d) return;
+    $('#f-ip').value = d.ip; $('#f-oport').value = d.port;
+    if (!$('#f-name').value) $('#f-name').value = d.name || ('Camera ' + d.ip);
+    $('#found').innerHTML = ''; omsg('Enter the camera username and password, then press Auto detect streams.');
+  };
+  $('#f-detect').onclick = function () {
+    var ip = $('#f-ip').value.trim();
+    if (!ip) { omsg('Enter the camera IP address first.'); return; }
+    omsg('Detecting...');
+    api('/api/onvif/probe', 'POST', { id: editing, ip: ip, port: +$('#f-oport').value || 80, user: $('#f-user').value, pass: $('#f-pass').value }).then(function (r) {
+      if (r.error) { omsg(r.error); return; }
+      $('#f-url').value = r.main.uri; $('#f-surl').value = r.sub ? r.sub.uri : '';
+      onv = { xaddr: r.xaddr, token: r.ptzToken || '', ptz: r.ptzXaddr || '', hasPtz: !!r.hasPtz };
+      var tc = r.main.codec !== 'H264' || (r.sub && r.sub.codec !== 'H264');
+      if (tc) $('#f-tc').checked = true;
+      omsg('Found ' + (r.sub ? '2 streams' : '1 stream') + ' (main ' + r.main.width + 'x' + r.main.height + ' ' + r.main.codec + '). PTZ: ' + (r.hasPtz ? 'yes' : 'no') + (tc ? '. H.265 conversion turned on.' : '.') + ' Press Save camera.');
+    }).catch(function () { omsg('Detection failed.'); });
+  };
+
+  // ---------- PTZ ----------
+  var ptzT = null;
+  function ptzSend(act, x, y, z) {
+    var c = slots[sel]; if (!c) return;
+    api('/api/cameras/' + c.id + '/ptz', 'POST', { action: act, x: x, y: y, z: z }).catch(function () { /* ignore */ });
+  }
+  function ptzEnd() { if (!ptzT) return; clearInterval(ptzT); ptzT = null; ptzSend('stop'); }
+  ['#ptz', '#zoom'].forEach(function (id) {
+    $(id).addEventListener('pointerdown', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      e.preventDefault();
+      var x = +b.dataset.x || 0, y = +b.dataset.y || 0, z = +b.dataset.z || 0;
+      ptzSend('move', x, y, z); clearInterval(ptzT);
+      ptzT = setInterval(function () { ptzSend('move', x, y, z); }, 2000);
+    });
+  });
+  window.addEventListener('pointerup', ptzEnd); window.addEventListener('pointercancel', ptzEnd);
+  window.addEventListener('blur', ptzEnd);
+
+  // ---------- snapshot ----------
+  var toastT;
+  function toast(m) { var t = $('#toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(toastT); toastT = setTimeout(function () { t.style.display = 'none'; }, 2800); }
+  function nowText() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+  function saveSnap(blob, name) {
+    var P = window.Capacitor && window.Capacitor.Plugins;
+    if (NATIVE && P && P.Filesystem && P.Share) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        P.Filesystem.writeFile({ path: name, data: String(fr.result).split(',')[1], directory: 'CACHE' })
+          .then(function (r) { return P.Share.share({ title: name, url: r.uri }); })
+          .catch(function () { toast('Could not save the snapshot.'); });
+      };
+      fr.readAsDataURL(blob);
+    } else {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove(); toast('Snapshot saved.');
+    }
+  }
+  $('#snap').onclick = function () {
+    var v = document.querySelector('#grid video'), c = slots[sel];
+    if (!v || !c || !v.videoWidth) { toast('The video is not playing yet.'); return; }
+    try {
+      var cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight;
+      var ctx = cv.getContext('2d'); ctx.drawImage(v, 0, 0, cv.width, cv.height);
+      var fs = Math.max(14, Math.round(cv.height / 36)), hb = fs * 1.9, label = 'CH' + pad(c.ch) + ' ' + c.name + '   ' + nowText();
+      ctx.font = '600 ' + fs + 'px sans-serif'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(8, cv.height - hb - 8, ctx.measureText(label).width + 16, hb);
+      ctx.fillStyle = '#fff'; ctx.fillText(label, 16, cv.height - hb / 2 - 8);
+      cv.toBlob(function (b) {
+        if (!b) { toast('Snapshot failed.'); return; }
+        saveSnap(b, 'EvoTron_CH' + pad(c.ch) + '_' + nowText().replace(/[-: ]/g, '') + '.jpg');
+      }, 'image/jpeg', 0.92);
+    } catch (e) { toast('Snapshot failed.'); }
   };
 
   // ---------- playback ----------

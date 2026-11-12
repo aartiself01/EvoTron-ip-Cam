@@ -90,6 +90,12 @@ input,select{width:100%;margin-top:4px;padding:9px 10px;border-radius:8px;border
 .rlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:12px}.rlist .ci{border:1px solid var(--line)}
 #pwtop{display:none;cursor:pointer;margin-bottom:12px;padding:10px 14px;border-radius:8px;background:var(--yellow);color:#1b1300;font-weight:600}
 details label{margin-top:10px}
+.ctl{display:none;flex-wrap:wrap;gap:16px;align-items:center;margin-top:12px;padding:12px 14px}
+.ptz{display:grid;grid-template-columns:repeat(3,44px);gap:4px}
+.ptz button,.zoom button{all:unset;cursor:pointer;text-align:center;padding:10px 0;border-radius:8px;background:var(--bg);border:1px solid var(--line);font-weight:700;touch-action:none;user-select:none}
+.zoom{display:flex;flex-direction:column;gap:4px}.zoom button{padding:10px 14px}
+.ptz button:active,.zoom button:active{background:var(--navy);color:#fff}
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:30;font-weight:600}
 </style>
 </head>
 <body>
@@ -117,6 +123,13 @@ details label{margin-top:10px}
       <div class="seg" id="layout"><button data-n="1">1</button><button data-n="4">4</button><button data-n="9">9</button><button data-n="16">16</button><button data-n="32" class="on">32</button></div><button class="btn ghost sm" id="pg" style="display:none"></button>
     </div>
     <div class="grid g9" id="grid"></div>
+    <div class="panel ctl" id="ctl" style="display:none">
+      <button class="btn" id="snap">Take snapshot</button>
+      <div id="ptzbox" style="display:none;gap:16px;align-items:center">
+        <div class="ptz" id="ptz"><span></span><button data-y="1" aria-label="Tilt up">&#9650;</button><span></span><button data-x="-1" aria-label="Pan left">&#9664;</button><span></span><button data-x="1" aria-label="Pan right">&#9654;</button><span></span><button data-y="-1" aria-label="Tilt down">&#9660;</button><span></span></div>
+        <div class="zoom" id="zoom"><button data-z="1">Zoom +</button><button data-z="-1">Zoom &minus;</button></div>
+      </div>
+    </div>
   </section>
   <section class="view" id="play">
     <div class="bar"><h2>Playback</h2>
@@ -142,11 +155,16 @@ details label{margin-top:10px}
   </section>
 </main>
 </div>
+<div id="toast" role="status"></div>
 <dialog id="dlg">
   <h3 id="dtitle">Add camera</h3>
+  <button class="btn ghost sm" type="button" id="f-search">Search cameras on network (ONVIF)</button>
+  <div id="found" class="rlist" style="grid-template-columns:1fr;margin:8px 0"></div>
   <div class="row"><label>Channel<select id="f-ch"></select></label><label>Camera name<input id="f-name" placeholder="Back gate"></label></div>
   <div class="row"><label>IP address<input id="f-ip" placeholder="192.168.1.120"></label><label>Port<input id="f-port" value="554" inputmode="numeric"></label></div>
   <div class="row"><label>Username<input id="f-user" autocomplete="off"></label><label>Password<input id="f-pass" type="password" autocomplete="new-password"></label></div>
+  <div class="row" style="align-items:flex-end;margin-bottom:6px"><label style="margin:0">ONVIF port<input id="f-oport" value="80" inputmode="numeric"></label><button class="btn ghost" type="button" id="f-detect" style="text-align:center">Auto detect streams</button></div>
+  <div class="note" id="omsg" style="margin:0 0 10px"></div>
   <label><input type="checkbox" id="f-rec" style="width:auto;margin:0 8px 0 0">Record continuously</label>
   <details><summary class="note" style="cursor:pointer">Advanced</summary>
     <label>Main stream path<input id="f-path"></label>

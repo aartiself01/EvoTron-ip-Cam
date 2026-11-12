@@ -8,6 +8,7 @@ const path = require('path');
 const net = require('net');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const onvif = require('./onvif');
 
 const MAX_CH = 32;
 
@@ -46,8 +47,16 @@ function createServer(opts) {
   const events = [];
   const addEvent = (c, type) => { events.unshift({ t: Date.now(), ch: c.ch, name: c.name, type }); events.length = Math.min(events.length, 200); };
 
+  // Adds the camera username and password to an RTSP URL that has none.
+  function withCreds(rawUrl, c) {
+    try {
+      const u = new URL(rawUrl);
+      if (!u.username && c.user) { u.username = c.user; u.password = c.pass || ''; }
+      return u.toString();
+    } catch (e) { return rawUrl; }
+  }
   function rtsp(c, sub) {
-    if (c.url) return sub && c.subUrl ? c.subUrl : c.url;
+    if (c.url) return withCreds(sub && c.subUrl ? c.subUrl : c.url, c);
     const p = (sub && c.subPath) || c.path || '/';
     return 'rtsp://' + encodeURIComponent(c.user || '') + ':' + encodeURIComponent(c.pass || '') + '@' + c.ip + ':' + (c.port || 554) + p;
   }
@@ -60,6 +69,11 @@ function createServer(opts) {
       if (k === 'pass' && b[k] === '' && old) return; // blank = keep existing password
       o[k] = TEXT.indexOf(k) >= 0 ? String(b[k]) : b[k];
     });
+    if (b.onvif !== undefined) {
+      const v = b.onvif;
+      const okUrl = (x) => (/^https?:\/\//i.test(String(x || '')) ? String(x) : '');
+      o.onvif = v && typeof v === 'object' ? { xaddr: okUrl(v.xaddr), token: String(v.token || ''), ptz: okUrl(v.ptz), hasPtz: !!(v.hasPtz && okUrl(v.ptz)) } : undefined;
+    }
     o.ch = parseInt(o.ch, 10); o.port = parseInt(o.port, 10) || 554;
     o.transcode = !!o.transcode; o.record = !!o.record;
     ['path', 'subPath'].forEach((k) => { if (o[k] && o[k][0] !== '/') o[k] = '/' + o[k]; });
@@ -78,6 +92,7 @@ function createServer(opts) {
     id: c.id, ch: c.ch, name: c.name, ip: c.ip || '', port: c.port, user: c.user || '', path: c.path || '', subPath: c.subPath || '',
     url: c.url || '', subUrl: c.subUrl || '', transcode: !!c.transcode, record: !!c.record,
     status: c._on ? 'online' : 'offline', recording: recs.has(c.id),
+    ptz: !!(c.onvif && c.onvif.hasPtz), onvif: c.onvif || null,
   });
   const waitFor = (f, ms) => new Promise((resolve) => {
     const t0 = Date.now();
@@ -228,6 +243,37 @@ function createServer(opts) {
     } catch (e) { /* no recordings yet */ }
     res.json(out);
   });
+  // ONVIF: find cameras on the network, read their streams, and control PTZ
+  app.post('/api/onvif/discover', auth, async (req, res) => {
+    try { res.json(await onvif.discover({ timeout: 3500 })); } catch (e) { res.json([]); }
+  });
+  app.post('/api/onvif/probe', auth, async (req, res) => {
+    const b = req.body || {};
+    const ip = String(b.ip || '').trim();
+    if (!/^[A-Za-z0-9.\-]+$/.test(ip)) return res.status(400).json({ error: 'Enter a valid IP address first.' });
+    let pass = String(b.pass || '');
+    const old = b.id ? find(String(b.id)) : null;
+    if (!pass && old) pass = old.pass || '';
+    try {
+      res.json(await onvif.inspect({ ip, port: parseInt(b.port, 10) || 80, user: String(b.user || ''), pass }));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+  });
+  const ptzTimers = new Map();
+  app.post('/api/cameras/:id/ptz', auth, async (req, res) => {
+    const c = find(req.params.id);
+    if (!c || !c.onvif || !c.onvif.hasPtz) return res.status(400).json({ error: 'PTZ is not available for this camera.' });
+    const b = req.body || {};
+    const n = (v) => Math.max(-1, Math.min(1, Number(v) || 0));
+    clearTimeout(ptzTimers.get(c.id));
+    try {
+      if (b.action === 'move') {
+        await onvif.ptzMove(c, n(b.x), n(b.y), n(b.z));
+        ptzTimers.set(c.id, setTimeout(() => { onvif.ptzStop(c).catch(() => {}); }, 4000)); // safety stop
+      } else await onvif.ptzStop(c);
+      res.json({ ok: true });
+    } catch (e) { res.status(400).json({ error: e.message }); }
+  });
+
   app.get('/api/events', auth, (req, res) => res.json(events));
 
   // media (token is part of the path so <video> and native HLS players can load it)

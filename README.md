@@ -48,6 +48,12 @@ The default stream paths are for CP Plus / Dahua style cameras:
 For Hikvision use `/Streaming/Channels/101` (main) and `/Streaming/Channels/102` (sub),
 or paste the full RTSP URL under Advanced. H.265 cameras: tick "Convert to H.264".
 
+## ONVIF, PTZ and snapshots
+- Add camera > **Search cameras on network (ONVIF)** lists cameras that answer on the local network. Pick one, enter the username and password, press **Auto detect streams**: the main and sub stream addresses, H.265 conversion and PTZ support are filled in automatically. ONVIF must be turned on in the camera, and the ONVIF port is usually 80 (some cameras use 8080 or 2020). The video itself still travels over RTSP.
+- Click a camera to open it large. Below the picture you get **Take snapshot** (saves a JPG with channel, name and time) and, for PTZ cameras, arrow and zoom buttons (hold to move, release to stop).
+- On the phone, the snapshot opens the share sheet so you can save it to the gallery or send it.
+- If a camera is added by hand (without Auto detect), PTZ is not available for it. Edit the camera and run Auto detect once.
+
 ## How it works
 - Live view: the grid uses the camera sub stream (light), single view uses the main stream. Streams start only when someone is watching and stop after 30 seconds of no viewers.
 - Recording: cameras with "Record continuously" are saved as 10 minute files in the data folder, kept for 7 days (`retentionDays` in `config.json`).

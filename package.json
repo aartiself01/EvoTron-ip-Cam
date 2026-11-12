@@ -20,7 +20,7 @@
   "build": {
     "appId": "com.evotron.vms",
     "productName": "EvoTron",
-    "files": ["main.js", "server.js", "web/**", "package.json"],
+    "files": ["main.js", "server.js", "onvif.js", "web/**", "package.json"],
     "asarUnpack": ["node_modules/ffmpeg-static/**"],
     "win": { "target": "nsis" },
     "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
