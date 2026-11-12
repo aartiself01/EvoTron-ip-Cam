@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EvoTron IP Camera Monitoring</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef2fa;--panel:#fff;--text:#0f1b36;--muted:#5a6985;--line:#d9e0ee;--blue:#1f6bea;--navy:#0b2b8c;--red:#e11d2e;--orange:#f7931e;--yellow:#ffd21f;--ok:#12a150;--tile:#08101f;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#070d1c;--panel:#0f1830;--text:#e9eefc;--muted:#97a6c6;--line:#1f2d52;--tile:#050a15;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#070d1c;--panel:#0f1830;--text:#e9eefc;--muted:#97a6c6;--line:#1f2d52;--tile:#050a15;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font-family:"Sora",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);position:relative}
+header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:linear-gradient(90deg,var(--red),var(--orange),var(--yellow),var(--blue),var(--navy))}
+.logo{background:#fff;border-radius:10px;padding:4px 10px;display:flex;border:1px solid var(--line)}
+.logo img{height:40px;display:block}
+header h1{font-size:15px;margin:0;font-weight:600}
+header .sp{flex:1}
+#clock{color:var(--muted);font-variant-numeric:tabular-nums}
+.app{flex:1;display:flex;min-height:0}
+nav{width:200px;padding:14px 10px;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:4px}
+nav button{all:unset;cursor:pointer;padding:10px 12px;border-radius:8px;color:var(--muted);font-weight:600;border-left:3px solid transparent}
+nav button:hover{background:var(--bg)}
+nav button.on{color:var(--text);background:var(--bg);border-left-color:var(--orange)}
+nav button:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+nav .foot{margin-top:auto;color:var(--muted);font-size:12px;padding:8px 12px}
+main{flex:1;min-width:0;overflow:auto;padding:16px 18px}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+.bar h2{margin:0;font-size:18px;flex:1}
+.btn{all:unset;cursor:pointer;padding:8px 16px;border-radius:8px;font-weight:600;color:#fff;background:linear-gradient(180deg,#46b0ff,var(--navy))}
+.btn.ghost{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+.btn.sm{padding:5px 11px;font-size:12px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{all:unset;cursor:pointer;padding:7px 13px;background:var(--panel);color:var(--muted);font-weight:600}
+.seg button.on{background:var(--navy);color:#fff}
+.view{display:none}.view.on{display:block}
+.grid{display:grid;gap:8px;grid-template-columns:repeat(3,1fr)}
+.grid.g1{grid-template-columns:1fr}.grid.g4{grid-template-columns:repeat(2,1fr)}.grid.g9{grid-template-columns:repeat(3,1fr)}.grid.g16{grid-template-columns:repeat(4,1fr)}.grid.g32{grid-template-columns:repeat(8,1fr);gap:5px}
+.g16 .name{font-size:11px}.g32 .name{font-size:9px;padding:2px 5px;left:4px;top:4px;max-width:calc(100% - 8px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.g32 .rec,.g32 .ts{display:none}.g32 .offmsg{font-size:10px}.g32 .offmsg small{display:none}
+.tile{position:relative;aspect-ratio:16/9;background:var(--tile);border-radius:8px;overflow:hidden;border:1px solid var(--line);cursor:pointer}
+.feed{position:absolute;inset:0}
+.feed::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.04) 0 1px,transparent 1px 3px)}
+.feed::after{content:"";position:absolute;top:0;bottom:0;width:30%;left:-30%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.09),transparent);animation:sweep 6s linear infinite}
+@keyframes sweep{to{left:110%}}
+@media (prefers-reduced-motion:reduce){.feed::after{animation:none}}
+.tile .name{position:absolute;left:8px;top:8px;background:rgba(5,10,21,.72);color:#fff;padding:3px 8px;border-radius:5px;font-size:12px;font-weight:600}
+.tile .rec{position:absolute;right:8px;top:8px;color:#fff;font-size:11px;font-weight:700;display:flex;gap:5px;align-items:center;background:rgba(5,10,21,.72);padding:3px 8px;border-radius:5px}
+.tile .rec i{width:8px;height:8px;border-radius:50%;background:var(--red)}
+.tile .ts{position:absolute;left:8px;bottom:8px;color:#fff;font-size:11px;font-variant-numeric:tabular-nums;background:rgba(5,10,21,.72);padding:2px 7px;border-radius:5px}
+.tile.off .feed{background:#111a2e}
+.tile.off .rec i{background:var(--yellow)}
+.tile .offmsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#c9d3ea;font-weight:600;flex-direction:column;gap:4px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:560px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:12px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--ok)}.dot.off{background:var(--red)}
+.alert{display:flex;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.alert:last-child{border:0}
+.tag{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;color:#1b1300;background:var(--yellow)}
+.tag.r{background:var(--red);color:#fff}.tag.o{background:var(--orange)}
+.alert .t{color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+.tl{padding:16px}
+.track{position:relative;height:46px;border-radius:8px;background:var(--bg);border:1px solid var(--line);overflow:hidden;margin:10px 0}
+.seg-rec{position:absolute;top:0;bottom:0;background:linear-gradient(180deg,#46b0ff,var(--navy));opacity:.9}
+.seg-ev{position:absolute;top:0;bottom:0;width:3px;background:var(--red)}
+.hours{display:flex;justify-content:space-between;color:var(--muted);font-size:11px}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);padding:20px;width:min(420px,92vw)}
+dialog::backdrop{background:rgba(5,10,21,.6)}
+dialog h3{margin:0 0 12px}
+label{display:block;margin-bottom:10px;color:var(--muted);font-size:12px;font-weight:600}
+input,select{width:100%;margin-top:4px;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.note{color:var(--muted);font-size:12px;margin-top:10px}
+@media (max-width:720px){nav{position:fixed;bottom:0;left:0;right:0;width:auto;flex-direction:row;z-index:5;border-top:1px solid var(--line);border-right:0;padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}nav button{flex:1;text-align:center;padding:9px 2px;font-size:11px;border-left:0;border-top:3px solid transparent}nav button.on{border-top-color:var(--orange)}nav .foot{display:none}main{padding-bottom:84px}.grid,.grid.g9,.grid.g16{grid-template-columns:repeat(2,1fr)}.grid.g32{grid-template-columns:repeat(4,1fr)}.grid.g1{grid-template-columns:1fr}header h1{display:none}}
+.clist{display:flex;flex-direction:column;gap:1px;margin:0 0 6px 14px;padding-left:8px;border-left:2px solid var(--line);max-height:38vh;overflow:auto}
+.clist .ci{padding:6px 8px;font-size:12px}
+.ci{all:unset;cursor:pointer;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;box-sizing:border-box;width:100%;color:var(--text);font-weight:600}
+.ci:hover{background:var(--bg)}
+.ci.on{background:var(--bg);box-shadow:inset 3px 0 0 var(--orange)}
+.ci:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.ci small{display:block;color:var(--muted);font-size:11px;font-weight:400}
+.ci .dot{margin:0;flex:none}
+@media (max-width:720px){.clist{display:none}}
+.tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.tile.empty{border-style:dashed;background:transparent}.tile.empty .offmsg{color:var(--muted)}
+.rlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:12px}.rlist .ci{border:1px solid var(--line)}
+#pwtop{display:none;cursor:pointer;margin-bottom:12px;padding:10px 14px;border-radius:8px;background:var(--yellow);color:#1b1300;font-weight:600}
+details label{margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><img src="logo.png" alt="EvoTron – Your eyes, everywhere"></div>
+  <h1>32-Channel IP Camera Monitoring</h1>
+  <span class="sp"></span>
+  <span id="clock"></span>
+  <button class="btn ghost sm" id="theme">Dark / Light</button>
+</header>
+<div class="app">
+<nav id="nav">
+  <button data-v="live" class="on">Live view</button>
+  <div class="clist" id="clist" role="group" aria-label="Cameras"></div>
+  <button data-v="play">Playback</button>
+  <button data-v="dev">Cameras</button>
+  <button data-v="alerts">Alerts</button>
+  <button data-v="set">Settings</button>
+  <div class="foot">EvoTron v1.0</div>
+</nav>
+<main>
+  <div id="pwtop">You are still using the default password (admin). Tap here to change it.</div>
+  <section class="view on" id="live">
+    <div class="bar"><h2>Live view</h2>
+      <div class="seg" id="layout"><button data-n="1">1</button><button data-n="4">4</button><button data-n="9">9</button><button data-n="16">16</button><button data-n="32" class="on">32</button></div><button class="btn ghost sm" id="pg" style="display:none"></button>
+    </div>
+    <div class="grid g9" id="grid"></div>
+  </section>
+  <section class="view" id="play">
+    <div class="bar"><h2>Playback</h2>
+      <select id="pcam" style="width:auto"></select><input type="date" id="pdate" style="width:auto">
+    </div>
+    <div class="panel tl"><video id="pvid" controls playsinline style="width:100%;max-height:60vh;background:#000;border-radius:8px"></video><div class="note" id="pnote">Choose a camera and a date, then pick a recording.</div><div id="rlist" class="rlist"></div></div>
+  </section>
+  <section class="view" id="dev">
+    <div class="bar"><h2>Cameras</h2><button class="btn" id="add">Add camera</button></div>
+    <div class="panel"><table><thead><tr><th>Channel</th><th>Name</th><th>IP address</th><th>Status</th><th>Recording</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>
+  </section>
+  <section class="view" id="alerts">
+    <div class="bar"><h2>Alerts</h2></div>
+    <div class="panel" id="al"></div>
+  </section>
+  <section class="view" id="set">
+    <div class="bar"><h2>Settings</h2></div>
+    <div class="panel tl">
+      <label>New password (at least 6 characters)<input id="s-pw" type="password" autocomplete="new-password"></label>
+      <div class="row"><button class="btn" id="s-save">Change password</button><button class="btn ghost" id="s-out">Log out</button></div>
+      <div class="note" id="s-msg"></div>
+    </div>
+  </section>
+</main>
+</div>
+<dialog id="dlg">
+  <h3 id="dtitle">Add camera</h3>
+  <div class="row"><label>Channel<select id="f-ch"></select></label><label>Camera name<input id="f-name" placeholder="Back gate"></label></div>
+  <div class="row"><label>IP address<input id="f-ip" placeholder="192.168.1.120"></label><label>Port<input id="f-port" value="554" inputmode="numeric"></label></div>
+  <div class="row"><label>Username<input id="f-user" autocomplete="off"></label><label>Password<input id="f-pass" type="password" autocomplete="new-password"></label></div>
+  <label><input type="checkbox" id="f-rec" style="width:auto;margin:0 8px 0 0">Record continuously</label>
+  <details><summary class="note" style="cursor:pointer">Advanced</summary>
+    <label>Main stream path<input id="f-path"></label>
+    <label>Sub stream path (used in grid view)<input id="f-spath"></label>
+    <label>Full RTSP URL (optional, replaces IP and path)<input id="f-url" placeholder="rtsp://user:pass@192.168.1.120:554/..."></label>
+    <label>Sub stream RTSP URL (optional)<input id="f-surl"></label>
+    <label><input type="checkbox" id="f-tc" style="width:auto;margin:0 8px 0 0">Convert to H.264 (for H.265 cameras, uses more CPU)</label>
+  </details>
+  <div class="note" id="err" style="color:var(--red)"></div>
+  <div class="row" style="margin-top:6px"><button class="btn ghost" id="cancel">Cancel</button><button class="btn" id="save">Save camera</button></div>
+</dialog>
+<dialog id="login">
+  <h3>Sign in to EvoTron</h3>
+  <label id="srvrow">Server address<input id="l-srv" placeholder="192.168.1.50:8080" autocapitalize="none" autocorrect="off"></label>
+  <label>Password<input id="l-pass" type="password" autocomplete="current-password"></label>
+  <div class="note" id="lerr" style="color:var(--red)"></div>
+  <div class="row" style="margin-top:6px"><button class="btn" id="l-go">Sign in</button></div>
+</dialog>
+<script src="/vendor/hls.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

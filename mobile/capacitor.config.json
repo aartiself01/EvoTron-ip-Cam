@@ -1,0 +1,6 @@
+{
+  "appId": "com.evotron.vms",
+  "appName": "EvoTron",
+  "webDir": "www",
+  "server": { "androidScheme": "http", "cleartext": true }
+}
