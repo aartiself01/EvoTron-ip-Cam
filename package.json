@@ -1,6 +1,6 @@
 {
   "name": "evotron-vms",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "EvoTron 32-channel IP camera monitoring",
   "main": "main.js",
   "scripts": {
@@ -11,7 +11,8 @@
   "dependencies": {
     "express": "^4.19.2",
     "ffmpeg-static": "^5.2.0",
-    "hls.js": "^1.5.15"
+    "hls.js": "^1.5.15",
+    "nodemailer": "^6.9.14"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -20,9 +21,25 @@
   "build": {
     "appId": "com.evotron.vms",
     "productName": "EvoTron",
-    "files": ["main.js", "server.js", "onvif.js", "web/**", "package.json"],
-    "asarUnpack": ["node_modules/ffmpeg-static/**"],
-    "win": { "target": "nsis" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+    "files": [
+      "main.js",
+      "preload.js",
+      "server.js",
+      "onvif.js",
+      "recovery.js",
+      "web/**",
+      "package.json",
+      "mail-default.json"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

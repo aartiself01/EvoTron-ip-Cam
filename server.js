@@ -9,8 +9,14 @@ const net = require('net');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const onvif = require('./onvif');
+const { createRecovery, sendMail } = require('./recovery');
 
 const MAX_CH = 32;
+
+// Camera microphones usually send G.711 audio, which browsers cannot play: convert it to AAC.
+function audioArgs(enabled) {
+  return enabled ? ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '48k', '-ar', '16000', '-ac', '1', '-af', 'aresample=async=1'] : ['-an'];
+}
 
 function createServer(opts) {
   opts = opts || {};
@@ -60,7 +66,7 @@ function createServer(opts) {
     const p = (sub && c.subPath) || c.path || '/';
     return 'rtsp://' + encodeURIComponent(c.user || '') + ':' + encodeURIComponent(c.pass || '') + '@' + c.ip + ':' + (c.port || 554) + p;
   }
-  const FIELDS = ['ch', 'name', 'ip', 'port', 'user', 'pass', 'path', 'subPath', 'url', 'subUrl', 'transcode', 'record'];
+  const FIELDS = ['ch', 'name', 'ip', 'port', 'user', 'pass', 'path', 'subPath', 'url', 'subUrl', 'transcode', 'record', 'audio'];
   const TEXT = ['name', 'ip', 'user', 'pass', 'path', 'subPath', 'url', 'subUrl'];
   function pick(b, old) {
     const o = Object.assign({}, old || {});
@@ -75,7 +81,7 @@ function createServer(opts) {
       o.onvif = v && typeof v === 'object' ? { xaddr: okUrl(v.xaddr), token: String(v.token || ''), ptz: okUrl(v.ptz), hasPtz: !!(v.hasPtz && okUrl(v.ptz)) } : undefined;
     }
     o.ch = parseInt(o.ch, 10); o.port = parseInt(o.port, 10) || 554;
-    o.transcode = !!o.transcode; o.record = !!o.record;
+    o.transcode = !!o.transcode; o.record = !!o.record; o.audio = o.audio === undefined ? true : !!o.audio;
     ['path', 'subPath'].forEach((k) => { if (o[k] && o[k][0] !== '/') o[k] = '/' + o[k]; });
     return o;
   }
@@ -91,7 +97,7 @@ function createServer(opts) {
   const pub = (c) => ({
     id: c.id, ch: c.ch, name: c.name, ip: c.ip || '', port: c.port, user: c.user || '', path: c.path || '', subPath: c.subPath || '',
     url: c.url || '', subUrl: c.subUrl || '', transcode: !!c.transcode, record: !!c.record,
-    status: c._on ? 'online' : 'offline', recording: recs.has(c.id),
+    status: c._on ? 'online' : 'offline', recording: recs.has(c.id), audio: c.audio !== false,
     ptz: !!(c.onvif && c.onvif.hasPtz), onvif: c.onvif || null,
   });
   const waitFor = (f, ms) => new Promise((resolve) => {
@@ -108,7 +114,9 @@ function createServer(opts) {
     const dir = path.join(hlsDir, key);
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
-    const args = ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', rtsp(c, q === 'sub'), '-an'];
+    // sound only on the main stream (grid tiles use the light sub stream)
+    const args = ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', rtsp(c, q === 'sub'), '-map', '0:v:0']
+      .concat(audioArgs(c.audio !== false && q === 'main'));
     if (c.transcode) args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-vf', 'scale=-2:' + (q === 'sub' ? 360 : 720), '-g', '25');
     else args.push('-c:v', 'copy');
     args.push('-f', 'hls', '-hls_time', '2', '-hls_list_size', '4', '-hls_flags', 'delete_segments',
@@ -138,9 +146,11 @@ function createServer(opts) {
     if (!c.record || !running || recs.has(c.id)) return;
     const dir = path.join(recDir, c.id);
     fs.mkdirSync(dir, { recursive: true });
-    const p = spawn(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', rtsp(c, false), '-an', '-c:v', 'copy',
-      '-f', 'segment', '-segment_time', '600', '-reset_timestamps', '1', '-strftime', '1', '-segment_format', 'mp4',
-      '-segment_format_options', 'movflags=+frag_keyframe+empty_moov+default_base_moof', path.join(dir, '%Y%m%d_%H%M%S.mp4')], { windowsHide: true });
+    const rargs = ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', rtsp(c, false), '-map', '0:v:0']
+      .concat(audioArgs(c.audio !== false), ['-c:v', 'copy',
+        '-f', 'segment', '-segment_time', '600', '-reset_timestamps', '1', '-strftime', '1', '-segment_format', 'mp4',
+        '-segment_format_options', 'movflags=+frag_keyframe+empty_moov+default_base_moof', path.join(dir, '%Y%m%d_%H%M%S.mp4')]);
+    const p = spawn(ffmpeg, rargs, { windowsHide: true });
     recs.set(c.id, p);
     const done = () => {
       if (recs.get(c.id) !== p) return;
@@ -198,6 +208,45 @@ function createServer(opts) {
       return res.json({ token: t, defaultPassword: cfg.defaultPw });
     }
     setTimeout(() => res.status(401).json({ error: 'Wrong password' }), 800);
+  });
+  // Optional mail account supplied with the installer (mail-default.json) or by environment variables.
+  // When present, users only enter their recovery email and never see the sending account.
+  let defMail = null;
+  try { defMail = JSON.parse(fs.readFileSync(path.join(__dirname, 'mail-default.json'), 'utf8')); } catch (e) { /* none */ }
+  if (!defMail && process.env.EVOTRON_SMTP_USER) {
+    defMail = { host: process.env.EVOTRON_SMTP_HOST || 'smtp.gmail.com', port: parseInt(process.env.EVOTRON_SMTP_PORT, 10) || 587, user: process.env.EVOTRON_SMTP_USER, pass: process.env.EVOTRON_SMTP_PASS };
+  }
+  const managed = !!(defMail && defMail.host && defMail.user && defMail.pass);
+  const smtpNow = () => (managed ? { host: defMail.host, port: defMail.port || 587, user: defMail.user, pass: defMail.pass, from: defMail.from || defMail.user } : (cfg.recovery || {}).smtp);
+  const recovery = createRecovery({ getCfg: () => cfg, save, hashPassword: hash, clearTokens: () => tokens.clear(), sendMail, getSmtp: smtpNow });
+  const slow = (res, code, body) => setTimeout(() => res.status(code).json(body), 800); // slows down guessing
+  app.post('/api/recover/request', async (req, res) => {
+    try { res.json({ ok: true, to: await recovery.request() }); } catch (e) { slow(res, 400, { error: e.message }); }
+  });
+  app.post('/api/recover/confirm', (req, res) => {
+    const b = req.body || {};
+    try { recovery.confirm(b.code, b.password); res.json({ ok: true }); } catch (e) { slow(res, 400, { error: e.message }); }
+  });
+  app.get('/api/recovery', auth, (req, res) => {
+    const r = cfg.recovery || {}, m = r.smtp || {};
+    res.json({ managed, email: r.email || '', host: managed ? '' : m.host || '', port: m.port || 587, user: managed ? '' : m.user || '', hasPass: !managed && !!m.pass });
+  });
+  app.post('/api/recovery', auth, (req, res) => {
+    const b = req.body || {}, old = (cfg.recovery && cfg.recovery.smtp) || {};
+    const email = String(b.email || '').trim(), host = String(b.host || '').trim(), port = parseInt(b.port, 10) || 587;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid recovery email address.' });
+    if (managed) { cfg.recovery = { email, smtp: old }; save(); return res.json({ ok: true }); }
+    if (!/^[A-Za-z0-9.\-]+$/.test(host) || port < 1 || port > 65535) return res.status(400).json({ error: 'Enter a valid SMTP server and port.' });
+    const user = String(b.user || '').trim();
+    cfg.recovery = { email, smtp: { host, port, user, pass: b.pass ? String(b.pass) : old.pass || '', from: user } };
+    save(); res.json({ ok: true });
+  });
+  app.post('/api/recovery/test', auth, async (req, res) => {
+    const r = cfg.recovery || {};
+    const smtp = smtpNow();
+    if (!r.email || !smtp || !smtp.host) return res.status(400).json({ error: 'Save the email settings first.' });
+    try { await sendMail(smtp, r.email, 'EvoTron test email', 'This is a test email from EvoTron. Password recovery by email is working.'); res.json({ ok: true }); }
+    catch (e) { res.status(400).json({ error: e.message }); }
   });
   app.get('/api/info', auth, (req, res) => res.json({ defaultPassword: cfg.defaultPw, maxChannels: MAX_CH }));
   app.post('/api/password', auth, (req, res) => {
@@ -300,6 +349,8 @@ function createServer(opts) {
         });
       });
     },
+    // Used by the desktop app menu (not reachable over the network): back to the default password "admin".
+    resetPassword() { cfg.password = hash('admin'); cfg.defaultPw = true; save(); tokens.clear(); },
     stop() {
       running = false; timers.forEach(clearInterval);
       streams.forEach((s) => s.proc.kill()); recs.forEach((p) => { p.stopped = true; p.kill(); });
@@ -308,7 +359,7 @@ function createServer(opts) {
   };
 }
 
-module.exports = { createServer };
+module.exports = { createServer, audioArgs };
 
 if (require.main === module) {
   const port = parseInt(process.env.PORT, 10) || 8080;

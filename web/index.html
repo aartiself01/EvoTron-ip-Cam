@@ -96,6 +96,44 @@ details label{margin-top:10px}
 .zoom{display:flex;flex-direction:column;gap:4px}.zoom button{padding:10px 14px}
 .ptz button:active,.zoom button:active{background:var(--navy);color:#fff}
 #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:30;font-weight:600}
+.fnd{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer;margin:0;color:var(--text);font-size:14px;font-weight:600}
+.fnd input{width:auto;margin:0;flex:none}
+.fnd small{display:block;color:var(--muted);font-size:11px;font-weight:400}
+.fnd.done{opacity:.55;cursor:default}
+#f-addsel[disabled]{opacity:.5;pointer-events:none}
+#save[disabled]{opacity:.5;pointer-events:none}
+dialog#dlg{width:min(980px,96vw);max-height:94vh;padding:16px 20px}
+dialog#dlg h3{margin:0 0 10px}
+#dlg .dbody{display:grid;grid-template-columns:340px 1fr;gap:22px;max-height:calc(94vh - 170px);overflow:auto}
+#dlg .dleft{border-right:1px solid var(--line);padding-right:20px}
+#dlg #found{max-height:48vh;overflow:auto}
+#dlg #found .fnd{padding:6px 10px}
+#dlg #found>.row{position:sticky;bottom:0;background:var(--panel);padding-top:6px}
+#dlg .adv{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+#dlg .dfoot{justify-content:flex-end;margin-top:10px}
+#dlg .dfoot>*{flex:0 0 170px;text-align:center}
+#dlg.single{width:min(640px,96vw)}
+#dlg.single .dbody{grid-template-columns:1fr}
+#dlg.single .dleft{display:none}
+@media (max-width:760px){#dlg .dbody{grid-template-columns:1fr}#dlg .dleft{border-right:0;padding-right:0;border-bottom:1px solid var(--line);padding-bottom:12px}#dlg .adv{grid-template-columns:1fr}#dlg .dfoot>*{flex:1}}
+.nosig{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:#0b1220;color:#c9d3ea;text-align:center;padding:8px}
+.nosig img{width:min(58%,190px);max-height:46%;object-fit:contain;background:#fff;border-radius:10px;padding:5px 10px}
+.nosig b{font-size:13px}.nosig small{font-size:11px;opacity:.8}
+.g1 .nosig img{width:min(40%,280px)}.g1 .nosig b{font-size:16px}
+.g32 .nosig{gap:3px;padding:4px}.g32 .nosig small{display:none}.g32 .nosig b{font-size:10px}.g32 .nosig img{width:72%;padding:3px 6px}
+.pbwrap{display:grid;grid-template-columns:1fr 290px;gap:12px;align-items:start}
+.pbmain{padding:12px}
+.pbbox{position:relative;width:100%;aspect-ratio:16/9;max-height:calc(100vh - 240px);background:#000;border-radius:8px;overflow:hidden}
+.pbbox video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.pblist{padding:0;display:flex;flex-direction:column;max-height:calc(100vh - 150px);overflow:hidden}
+.pbh{padding:12px 14px;font-weight:700;border-bottom:1px solid var(--line)}
+.rlist2{overflow:auto;padding:6px;display:flex;flex-direction:column;gap:4px}
+.rlist2 .ci{border:1px solid var(--line)}
+@media (max-width:900px){.pbwrap{grid-template-columns:1fr}.pblist{max-height:42vh}.pbbox{max-height:none}}
+.fndw{margin:0}
+.cred{display:flex;gap:6px;padding:4px 2px 8px}
+.cred input{margin:0;padding:6px 8px;font-size:12px;min-width:0}
+.ci.done{opacity:.55;cursor:default}
 </style>
 </head>
 <body>
@@ -114,7 +152,7 @@ details label{margin-top:10px}
   <button data-v="dev">Cameras</button>
   <button data-v="alerts">Alerts</button>
   <button data-v="set">Settings</button>
-  <div class="foot">EvoTron v1.0</div>
+  <div class="foot" id="ver">EvoTron v1.2</div>
 </nav>
 <main>
   <div id="pwtop">You are still using the default password (admin). Tap here to change it.</div>
@@ -125,6 +163,7 @@ details label{margin-top:10px}
     <div class="grid g9" id="grid"></div>
     <div class="panel ctl" id="ctl" style="display:none">
       <button class="btn" id="snap">Take snapshot</button>
+      <button class="btn ghost" id="snd" type="button">Sound: off</button>
       <div id="ptzbox" style="display:none;gap:16px;align-items:center">
         <div class="ptz" id="ptz"><span></span><button data-y="1" aria-label="Tilt up">&#9650;</button><span></span><button data-x="-1" aria-label="Pan left">&#9664;</button><span></span><button data-x="1" aria-label="Pan right">&#9654;</button><span></span><button data-y="-1" aria-label="Tilt down">&#9660;</button><span></span></div>
         <div class="zoom" id="zoom"><button data-z="1">Zoom +</button><button data-z="-1">Zoom &minus;</button></div>
@@ -135,7 +174,18 @@ details label{margin-top:10px}
     <div class="bar"><h2>Playback</h2>
       <select id="pcam" style="width:auto"></select><input type="date" id="pdate" style="width:auto">
     </div>
-    <div class="panel tl"><video id="pvid" controls playsinline style="width:100%;max-height:60vh;background:#000;border-radius:8px"></video><div class="note" id="pnote">Choose a camera and a date, then pick a recording.</div><div id="rlist" class="rlist"></div></div>
+    <div class="pbwrap">
+      <div class="panel pbmain">
+        <div class="pbbox"><video id="pvid" controls playsinline></video>
+          <div class="nosig" id="pph"><img src="logo.png" alt=""><b>Select a recording</b><small>Choose a time from the list</small></div>
+        </div>
+        <div class="note" id="pnote" style="margin:8px 2px 0"></div>
+      </div>
+      <div class="panel pblist">
+        <div class="pbh">Recordings <small id="rcount" style="font-weight:400;color:var(--muted)"></small></div>
+        <div id="rlist" class="rlist2"></div>
+      </div>
+    </div>
   </section>
   <section class="view" id="dev">
     <div class="bar"><h2>Cameras</h2><button class="btn" id="add">Add camera</button></div>
@@ -150,7 +200,20 @@ details label{margin-top:10px}
     <div class="panel tl">
       <label>New password (at least 6 characters)<input id="s-pw" type="password" autocomplete="new-password"></label>
       <div class="row"><button class="btn" id="s-save">Change password</button><button class="btn ghost" id="s-out">Log out</button></div>
+      <div class="row" style="margin-top:8px"><button class="btn ghost" id="s-forget" style="text-align:center">Forget the remembered camera password</button></div>
       <div class="note" id="s-msg"></div>
+      <div class="note" id="ver2" style="margin:12px 0 0">EvoTron v1.2</div>
+    </div>
+    <div class="panel tl" style="margin-top:12px">
+      <h3 style="margin:0 0 12px;font-size:15px">Password recovery by email</h3>
+      <label>Recovery email (where the code is sent)<input id="r-email" type="email" autocomplete="off"></label>
+      <div id="r-smtp">
+      <label>Mail provider<select id="r-prov"><option value="">Other (type the server below)</option><option value="smtp.gmail.com">Gmail</option><option value="smtp.office365.com">Outlook / Microsoft 365</option></select></label>
+      <div class="row"><label>SMTP server<input id="r-host" placeholder="smtp.gmail.com"></label><label>Port<input id="r-port" value="587" inputmode="numeric"></label></div>
+      <div class="row"><label>Sender email (username)<input id="r-user" autocomplete="off"></label><label>App password<input id="r-pass" type="password" autocomplete="new-password"></label></div>
+      </div>
+      <div class="row"><button class="btn" id="r-save" style="text-align:center">Save</button><button class="btn ghost" id="r-test" style="text-align:center">Send test email</button></div>
+      <div class="note" id="r-msg"></div>
     </div>
   </section>
 </main>
@@ -158,30 +221,48 @@ details label{margin-top:10px}
 <div id="toast" role="status"></div>
 <dialog id="dlg">
   <h3 id="dtitle">Add camera</h3>
-  <button class="btn ghost sm" type="button" id="f-search">Search cameras on network (ONVIF)</button>
-  <div id="found" class="rlist" style="grid-template-columns:1fr;margin:8px 0"></div>
-  <div class="row"><label>Channel<select id="f-ch"></select></label><label>Camera name<input id="f-name" placeholder="Back gate"></label></div>
-  <div class="row"><label>IP address<input id="f-ip" placeholder="192.168.1.120"></label><label>Port<input id="f-port" value="554" inputmode="numeric"></label></div>
-  <div class="row"><label>Username<input id="f-user" autocomplete="off"></label><label>Password<input id="f-pass" type="password" autocomplete="new-password"></label></div>
-  <div class="row" style="align-items:flex-end;margin-bottom:6px"><label style="margin:0">ONVIF port<input id="f-oport" value="80" inputmode="numeric"></label><button class="btn ghost" type="button" id="f-detect" style="text-align:center">Auto detect streams</button></div>
-  <div class="note" id="omsg" style="margin:0 0 10px"></div>
-  <label><input type="checkbox" id="f-rec" style="width:auto;margin:0 8px 0 0">Record continuously</label>
-  <details><summary class="note" style="cursor:pointer">Advanced</summary>
-    <label>Main stream path<input id="f-path"></label>
-    <label>Sub stream path (used in grid view)<input id="f-spath"></label>
-    <label>Full RTSP URL (optional, replaces IP and path)<input id="f-url" placeholder="rtsp://user:pass@192.168.1.120:554/..."></label>
-    <label>Sub stream RTSP URL (optional)<input id="f-surl"></label>
-    <label><input type="checkbox" id="f-tc" style="width:auto;margin:0 8px 0 0">Convert to H.264 (for H.265 cameras, uses more CPU)</label>
-  </details>
-  <div class="note" id="err" style="color:var(--red)"></div>
-  <div class="row" style="margin-top:6px"><button class="btn ghost" id="cancel">Cancel</button><button class="btn" id="save">Save camera</button></div>
+  <div class="dbody">
+    <div class="dleft">
+      <div class="note" style="margin:0 0 8px;font-weight:600">Find cameras automatically</div>
+      <button class="btn" type="button" id="f-search" style="display:block;width:100%;box-sizing:border-box;text-align:center">Search cameras on network (ONVIF)</button>
+      <div id="found" class="rlist" style="grid-template-columns:1fr;margin:8px 0"></div>
+    </div>
+    <div class="dright">
+      <div class="row"><label>Channel<select id="f-ch"></select></label><label>Camera name<input id="f-name" placeholder="Back gate"></label></div>
+      <div class="row"><label>IP address<input id="f-ip" placeholder="192.168.1.120"></label><label>Port<input id="f-port" value="554" inputmode="numeric"></label></div>
+      <div class="row"><label>Username<input id="f-user" autocomplete="off"></label><label>Password<input id="f-pass" type="password" autocomplete="new-password"></label></div>
+      <div class="row" style="align-items:flex-end;margin-bottom:10px"><label style="margin:0">ONVIF port<input id="f-oport" value="80" inputmode="numeric"></label><button class="btn ghost" type="button" id="f-detect" style="text-align:center">Auto detect streams</button></div>
+      <div class="row" style="margin-bottom:10px"><label style="margin:0"><input type="checkbox" id="f-rec" style="width:auto;margin:0 8px 0 0">Record continuously</label><label style="margin:0"><input type="checkbox" id="f-audio" style="width:auto;margin:0 8px 0 0">Camera microphone</label></div>
+      <details><summary class="note" style="cursor:pointer;margin:0">Advanced</summary>
+        <div class="adv" style="margin-top:8px">
+          <label>Main stream path<input id="f-path"></label>
+          <label>Sub stream path (used in grid view)<input id="f-spath"></label>
+          <label>Full RTSP URL (optional, replaces IP and path)<input id="f-url" placeholder="rtsp://user:pass@192.168.1.120:554/..."></label>
+          <label>Sub stream RTSP URL (optional)<input id="f-surl"></label>
+        </div>
+        <label><input type="checkbox" id="f-tc" style="width:auto;margin:0 8px 0 0">Convert to H.264 (for H.265 cameras, uses more CPU)</label>
+      </details>
+    </div>
+  </div>
+  <div class="note" id="omsg" style="margin:10px 0 0"></div>
+  <div class="note" id="err" style="color:var(--red);margin:4px 0 0"></div>
+  <div class="row dfoot"><button class="btn ghost" id="cancel">Cancel</button><button class="btn" id="save">Save camera</button></div>
+</dialog>
+<dialog id="rec">
+  <h3>Reset password</h3>
+  <div id="rec-pc" style="display:none;margin-bottom:12px"><button class="btn ghost" type="button" id="rec-desk" style="display:block;width:100%;box-sizing:border-box;text-align:center">Reset on this PC (password becomes admin)</button></div>
+  <div id="rec-s1"><div class="note" style="margin:0 0 8px">We can email a 6-digit code to the recovery email saved in Settings.</div><button class="btn" type="button" id="rec-send" style="display:block;width:100%;box-sizing:border-box;text-align:center">Email me a code</button></div>
+  <div id="rec-s2" style="display:none"><label>6-digit code<input id="rec-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label><label>New password (at least 6 characters)<input id="rec-pw" type="password" autocomplete="new-password"></label><button class="btn" type="button" id="rec-go" style="display:block;width:100%;box-sizing:border-box;text-align:center">Set new password</button></div>
+  <div class="note" id="rec-msg" style="color:var(--red)"></div>
+  <div class="row" style="margin-top:6px"><button class="btn ghost" type="button" id="rec-close" style="text-align:center">Close</button></div>
 </dialog>
 <dialog id="login">
   <h3>Sign in to EvoTron</h3>
   <label id="srvrow">Server address<input id="l-srv" placeholder="192.168.1.50:8080" autocapitalize="none" autocorrect="off"></label>
   <label>Password<input id="l-pass" type="password" autocomplete="current-password"></label>
   <div class="note" id="lerr" style="color:var(--red)"></div>
-  <div class="row" style="margin-top:6px"><button class="btn" id="l-go">Sign in</button></div>
+  <div class="row" style="margin-top:6px"><button class="btn" id="l-go" style="text-align:center">Sign in</button></div>
+  <div style="margin-top:10px;text-align:center"><button class="btn ghost sm" type="button" id="l-forgot">Forgot password?</button></div>
 </dialog>
 <script src="/vendor/hls.js"></script>
 <script src="app.js"></script>
