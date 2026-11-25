@@ -12,7 +12,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Write version and build number
+        shell: bash
+        run: |
+          VER=$(node -p "require('./package.json').version" | sed 's/\.0$//')
+          echo "{\"version\":\"$VER\",\"build\":\"${{ github.run_number }}\",\"date\":\"$(date -u +%Y-%m-%d)\"}" > web/version.json
       - run: npm install
+      - name: Add the mail sending account from GitHub secrets (optional)
+        shell: bash
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+        run: |
+          if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASS" ]; then
+            node -e "require('fs').writeFileSync('mail-default.json', JSON.stringify({host: process.env.SMTP_HOST || 'smtp.gmail.com', port: parseInt(process.env.SMTP_PORT, 10) || 587, user: process.env.SMTP_USER, pass: process.env.SMTP_PASS}))"
+          fi
       - run: npm run dist
       - uses: actions/upload-artifact@v4
         with:
@@ -26,6 +42,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Write version and build number
+        shell: bash
+        run: |
+          VER=$(node -p "require('./package.json').version" | sed 's/\.0$//')
+          echo "{\"version\":\"$VER\",\"build\":\"${{ github.run_number }}\",\"date\":\"$(date -u +%Y-%m-%d)\"}" > web/version.json
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -35,6 +56,7 @@ jobs:
         run: |
           npm install
           npx cap add android
+          sed -i 's/versionCode 1/versionCode 2/; s/versionName "1.0"/versionName "1.2"/' android/app/build.gradle
           npm run sync
           cd android
           chmod +x gradlew
